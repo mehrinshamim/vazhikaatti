@@ -31,6 +31,7 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -98,6 +99,7 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
 
     setIsSubmitting(true);
     setErrorMsg("");
+    setSuccessMsg("");
 
     try {
       let imageUrl = null;
@@ -111,7 +113,6 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
           .upload(fileName, imageFile);
 
         if (uploadError) {
-          // If bucket doesn't exist or RLS issues, might throw error.
           throw new Error("Image upload failed: " + uploadError.message);
         }
 
@@ -122,10 +123,42 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
         imageUrl = publicUrlData.publicUrl;
       }
 
-      // Insert record
-      const locationStr = locationName;
+      // Prepare data for validation
       const coordsStr = coordinates ? `${coordinates.lat},${coordinates.lng}` : null;
+      const validationPayload = {
+        user_id: userId,
+        location: locationName,
+        coordinates: coordsStr,
+        category,
+        title,
+        description,
+        rating,
+        image_url: imageUrl,
+      };
 
+      // Call validation API
+      const validationResponse = await fetch("http://localhost:8000/validate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(validationPayload),
+      });
+
+      if (!validationResponse.ok) {
+        throw new Error(`Validation API returned status ${validationResponse.status}`);
+      }
+
+      const validationData = await validationResponse.json();
+
+      // Check if validation passed
+      if (!validationData.valid) {
+        setErrorMsg(`Validation Error: ${validationData.reason || "Validation failed. Please check your input."}`);
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Insert record into Supabase only if validation passed
       const { error: insertError } = await supabase.from("review").insert([
         {
           user_id: userId,
@@ -133,7 +166,7 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
           description,
           category,
           rating,
-          location: locationStr,
+          location: locationName,
           coordinates: coordsStr,
           image_url: imageUrl,
         }
@@ -143,15 +176,23 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
         throw new Error("Failed to submit review: " + insertError.message);
       }
 
-      // Reset form and close
-      onSuccess();
-      onClose();
+      // Show success message
+      setSuccessMsg("✅ Report submitted successfully! Thank you for keeping our roads safe.");
+
+      // Reset form after a short delay
+      setTimeout(() => {
+        onSuccess();
+        onClose();
+      }, 1500);
     } catch (err: any) {
       console.error(err);
 
-      // Handle the specific RLS policy violation for storage
       if (err.message && err.message.includes("Row-Level Security") || err.message.includes("row-level security")) {
         setErrorMsg("Storage Error: Please enable public INSERT access on the 'vazhikaatti-review-images' bucket in Supabase (Storage -> Policies -> New Policy -> Allow Insert).");
+      } else if (err.message && err.message.includes("Validation API")) {
+        setErrorMsg("Failed to connect to validation service. Please try again.");
+      } else if (err instanceof TypeError) {
+        setErrorMsg("Network error: Unable to reach the validation service.");
       } else {
         setErrorMsg(err.message || "An unexpected error occurred.");
       }
@@ -180,6 +221,12 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
           {errorMsg && (
             <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-sm font-medium border border-red-100">
               {errorMsg}
+            </div>
+          )}
+
+          {successMsg && (
+            <div className="bg-emerald-50 text-emerald-600 px-4 py-3 rounded-xl text-sm font-medium border border-emerald-100">
+              {successMsg}
             </div>
           )}
 
