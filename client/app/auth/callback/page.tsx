@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabaseBrowser } from "../../utils/supabase-browser";
+import { supabase } from "../../utils/supabase";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -13,7 +13,7 @@ export default function AuthCallbackPage() {
       // The Supabase client automatically parses the `#access_token=...` from the URL,
       // establishes the session, and stores it in localStorage.
       // We just need to check if we have a session.
-      const { data: { session }, error } = await supabaseBrowser.auth.getSession();
+      const { data: { session }, error } = await supabase.auth.getSession();
 
       if (error) {
         console.error("Auth error:", error.message);
@@ -28,7 +28,7 @@ export default function AuthCallbackPage() {
       } else {
         // Wait a tiny bit just in case the client is still parsing the URL hash
         setTimeout(async () => {
-          const { data: { session: retrySession } } = await supabaseBrowser.auth.getSession();
+          const { data: { session: retrySession } } = await supabase.auth.getSession();
           if (retrySession) {
             router.push("/dashboard");
           } else {
