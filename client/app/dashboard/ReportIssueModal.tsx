@@ -1,5 +1,18 @@
 import { useState, useRef } from "react";
+import dynamic from "next/dynamic";
 import { supabase } from "../utils/supabase";
+
+const LocationPickerMap = dynamic(() => import("./LocationPickerMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="fixed inset-0 z-[4000] flex items-center justify-center bg-white">
+      <svg className="animate-spin h-8 w-8 text-emerald-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+    </div>
+  ),
+});
 
 interface ReportIssueModalProps {
   isOpen: boolean;
@@ -25,9 +38,15 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
   const [rating, setRating] = useState(3);
   const [locationName, setLocationName] = useState("");
   const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationSuggestions, setLocationSuggestions] = useState<Array<{ display_name: string; lat: string; lon: string }>>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
+  const locationDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const locationAbortRef = useRef<AbortController | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
+  const [showMapPicker, setShowMapPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -35,6 +54,44 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
+
+  const fetchLocationSuggestions = async (query: string) => {
+    if (query.length < 3) {
+      setLocationSuggestions([]);
+      return;
+    }
+    setIsFetchingSuggestions(true);
+    if (locationAbortRef.current) locationAbortRef.current.abort();
+    locationAbortRef.current = new AbortController();
+    try {
+      const res = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`, {
+        signal: locationAbortRef.current.signal,
+      });
+      const data = await res.json();
+      setLocationSuggestions(Array.isArray(data) ? data : []);
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name !== "AbortError") {
+        setLocationSuggestions([]);
+      }
+    }
+    setIsFetchingSuggestions(false);
+  };
+
+  const handleLocationInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setLocationName(val);
+    setCoordinates(null);
+    setShowSuggestions(true);
+    if (locationDebounceRef.current) clearTimeout(locationDebounceRef.current);
+    locationDebounceRef.current = setTimeout(() => fetchLocationSuggestions(val), 300);
+  };
+
+  const handleSuggestionSelect = (place: { display_name: string; lat: string; lon: string }) => {
+    setLocationName(place.display_name);
+    setCoordinates({ lat: parseFloat(place.lat), lng: parseFloat(place.lon) });
+    setShowSuggestions(false);
+    setLocationSuggestions([]);
+  };
 
   const handleGetCurrentLocation = () => {
     if (!navigator.geolocation) {
@@ -123,8 +180,22 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
       }
 
       // Insert record
-      const locationStr = locationName;
-      const coordsStr = coordinates ? `${coordinates.lat},${coordinates.lng}` : null;
+      let finalCoordsStr = coordinates ? `${coordinates.lat},${coordinates.lng}` : null;
+
+      // If user manually typed a location but we don't have coordinates, try to forward geocode it
+      if (!coordinates && locationName) {
+        try {
+          const res = await fetch(`/api/geocode?q=${encodeURIComponent(locationName)}`);
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            // Take the first result
+            finalCoordsStr = `${data[0].lat},${data[0].lon}`;
+          }
+        } catch (e) {
+          console.error("Forward geocode failed during submission", e);
+          // We will proceed without coordinates if it fails
+        }
+      }
 
       const { error: insertError } = await supabase.from("review").insert([
         {
@@ -133,8 +204,8 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
           description,
           category,
           rating,
-          location: locationStr,
-          coordinates: coordsStr,
+          location: locationName,
+          coordinates: finalCoordsStr,
           image_url: imageUrl,
         }
       ]);
@@ -214,16 +285,41 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-bold text-gray-700">Location <span className="text-red-500">*</span></label>
             <div className="flex gap-2">
-              <input
-                type="text"
-                value={locationName}
-                onChange={(e) => {
-                  setLocationName(e.target.value);
-                  setCoordinates(null); // Clear coordinates if manually edited
-                }}
-                placeholder="Where is this happening?"
-                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all placeholder-gray-400 text-gray-800"
-              />
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  value={locationName}
+                  onChange={handleLocationInput}
+                  onFocus={() => { if (locationName.length >= 3) setShowSuggestions(true); }}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                  placeholder="Search location in Kochi..."
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all placeholder-gray-400 text-gray-800"
+                />
+                {isFetchingSuggestions && (
+                  <div className="absolute right-3 top-3">
+                    <svg className="animate-spin h-4 w-4 text-emerald-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  </div>
+                )}
+                {showSuggestions && locationSuggestions.length > 0 && (
+                  <ul className="absolute z-[3000] w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                    {locationSuggestions.map((place, idx) => (
+                      <li
+                        key={idx}
+                        onMouseDown={() => handleSuggestionSelect(place)}
+                        className="px-3 py-2.5 hover:bg-emerald-50 cursor-pointer border-b last:border-0 text-xs text-gray-700"
+                      >
+                        {place.display_name}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {coordinates && (
+                  <p className="text-xs text-emerald-600 mt-1 font-medium">✓ Location pinned</p>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={handleGetCurrentLocation}
@@ -244,6 +340,26 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
               </button>
             </div>
           </div>
+
+          {/* Pin on Map button */}
+          <button
+            type="button"
+            onClick={() => setShowMapPicker(true)}
+            className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 hover:bg-emerald-50 border-2 border-dashed border-gray-200 hover:border-emerald-300 rounded-xl transition-all group"
+          >
+            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-white border border-gray-200 group-hover:border-emerald-200 group-hover:bg-emerald-50 shadow-sm shrink-0 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-emerald-500" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-gray-700 group-hover:text-emerald-700 transition-colors">Pin on Map</p>
+              <p className="text-xs text-gray-400">Tap a spot on the map to pin the exact location</p>
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-300 group-hover:text-emerald-400 ml-auto shrink-0 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
 
           {/* Description row */}
           <div className="flex flex-col gap-1.5">
@@ -336,6 +452,18 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
           </button>
         </form>
       </div>
+
+      {/* Map location picker overlay */}
+      {showMapPicker && (
+        <LocationPickerMap
+          onConfirm={({ lat, lng, locationName: pickedName }) => {
+            setLocationName(pickedName);
+            setCoordinates({ lat, lng });
+            setShowMapPicker(false);
+          }}
+          onCancel={() => setShowMapPicker(false)}
+        />
+      )}
     </div>
   );
 }

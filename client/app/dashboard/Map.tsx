@@ -119,7 +119,7 @@ export default function Map({
   endPoint = null,
   reviews = [],
 }: MapProps) {
-  const defaultCenter: [number, number] = [20.5937, 78.9629];
+  const defaultCenter: [number, number] = [10.0159, 76.3419]; // Kochi, Kerala
   const routeColors = ["#4F46E5", "#0D9488", "#E11D48"]; // Indigo, Teal, Rose
 
   const startIcon = createPinIcon("#16a34a", "Start");
@@ -135,13 +135,14 @@ export default function Map({
     <div className="w-full h-full relative z-0">
       <MapContainer
         center={position || defaultCenter}
-        zoom={position ? 16 : 5}
+        zoom={position ? 16 : 13}
         scrollWheelZoom={true}
+        zoomControl={false}
         className="w-full h-full"
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
         />
 
         {/* Live location marker */}

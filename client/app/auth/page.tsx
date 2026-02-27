@@ -42,29 +42,37 @@ export default function AuthPage() {
       <div
         className="relative z-10 flex flex-col items-center gap-8 px-8 py-10 rounded-3xl text-center"
         style={{
-          background: "rgba(255,255,255,0.07)",
-          backdropFilter: "blur(18px)",
-          WebkitBackdropFilter: "blur(18px)",
-          border: "1px solid rgba(255,255,255,0.15)",
-          boxShadow: "0 8px 40px rgba(0,0,0,0.4)",
-          minWidth: "300px",
-          maxWidth: "380px",
+          background: "linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(16,185,129,0.06) 100%)",
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderBottom: "1px solid rgba(16,185,129,0.2)",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.4), 0 0 20px rgba(16,185,129,0.08) inset",
+          minWidth: "320px",
+          maxWidth: "400px",
           width: "90vw",
           fontFamily: "var(--font-josefin-sans), 'Josefin Sans', sans-serif",
         }}
       >
         {/* Logo / App name */}
-        <div className="flex flex-col items-center gap-1">
-          <span className="text-4xl">🌿</span>
+        <div className="flex flex-col items-center gap-3 w-full">
           <h1
-            className="text-3xl font-bold text-white tracking-wide"
+            className="text-4xl font-bold text-white tracking-wide mt-1"
             style={{ fontFamily: "inherit" }}
           >
-            Vazhikaatti
+            Vazhikaatti 🌿
           </h1>
-          <p className="text-sm text-white/60 mt-1">
-            Your community safety companion
-          </p>
+          <div className="flex flex-col items-center">
+            <span
+              className="text-[0.95rem] font-semibold text-emerald-300 tracking-wide"
+              style={{ fontFamily: "inherit" }}
+            >
+              Meet your new safety guide!
+            </span>
+            <p className="text-xs text-white/70 mt-1 max-w-xs leading-relaxed">
+              Your community safety companion
+            </p>
+          </div>
         </div>
 
         <div className="w-full h-px bg-white/10" />

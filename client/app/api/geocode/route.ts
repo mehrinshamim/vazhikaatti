@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=in&limit=5`,
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=in&limit=8&viewbox=76.18,10.10,76.45,9.88&bounded=1`,
       {
         headers: {
           "User-Agent": "VazhikaattiApp/1.0 (contact@vazhikaatti.com)",
