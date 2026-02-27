@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { supabaseBrowser } from "../utils/supabase-browser";
+import { supabase } from "../utils/supabase";
 
 export default function AuthPage() {
   const [loading, setLoading] = useState(false);
@@ -11,7 +11,7 @@ export default function AuthPage() {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setError(null);
-    const { error } = await supabaseBrowser.auth.signInWithOAuth({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
