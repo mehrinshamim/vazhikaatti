@@ -176,7 +176,8 @@ export default function DashboardPage() {
     try {
       // ORS API expects Longitude, Latitude arrays
       const body = {
-        coordinates: [[startPlace.lon, startPlace.lat], [destPlace.lon, destPlace.lat]]
+        coordinates: [[startPlace.lon, startPlace.lat], [destPlace.lon, destPlace.lat]],
+        alternative_routes: { target_count: 3 }
       };
 
       const res = await fetch("https://api.openrouteservice.org/v2/directions/foot-hiking/geojson", {
