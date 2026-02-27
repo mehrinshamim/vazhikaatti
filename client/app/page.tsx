@@ -52,7 +52,7 @@ export default function Home() {
 
         {/* CTA Button — sits near the bottom */}
         <div className="flex items-end">
-          <a href="#" className="get-started-btn">
+          <a href="/auth" className="get-started-btn">
             Get Started
           </a>
         </div>
