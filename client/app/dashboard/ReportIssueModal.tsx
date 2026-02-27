@@ -319,10 +319,18 @@ export default function ReportIssueModal({ isOpen, isHidden, onClose, userId, on
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto font-sans flex flex-col border border-gray-100">
-        <div className="sticky top-0 bg-white/95 backdrop-blur-md z-10 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-            <span className="text-emerald-500">✍️</span> Report Issue
-          </h2>
+        <div className="sticky top-0 bg-white/95 backdrop-blur-md z-10 px-6 py-4 border-b border-gray-100 flex justify-between items-start">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 ring-2 ring-emerald-100">
+              <img src="/mascot.png" alt="Vazhikaatti Mascot" className="w-full h-full object-cover" />
+            </div>
+            <div className="flex flex-col">
+              <h2 className="text-2xl font-bold text-gray-800 tracking-wide">
+                Report Issue
+              </h2>
+              <p className="text-xs font-semibold text-emerald-600">Help Vazhikaatti keep your community safe.</p>
+            </div>
+          </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -361,11 +369,11 @@ export default function ReportIssueModal({ isOpen, isHidden, onClose, userId, on
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all bg-white text-gray-800 cursor-pointer appearance-none"
+              className="w-full px-4 py-2.5 rounded-xl border border-white focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all bg-white text-gray-800 cursor-pointer appearance-none"
               style={{ backgroundImage: `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="%236B7280"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>')`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 1rem center', backgroundSize: '1.2em' }}
             >
               {CATEGORIES.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
+                <option key={cat} value={cat} className="bg-white text-gray-800">{cat}</option>
               ))}
             </select>
           </div>
