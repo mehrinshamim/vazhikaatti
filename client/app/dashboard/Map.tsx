@@ -20,6 +20,19 @@ export interface RouteOption {
   duration: number;
 }
 
+export type Review = {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string;
+  category: string;
+  rating: number;
+  location: string;
+  coordinates: string | null;
+  image_url: string | null;
+  created_at: string;
+};
+
 function FlyToLocation({ position }: { position: [number, number] | null }) {
   const map = useMap();
   const isFirstFly = useRef(true);
@@ -93,6 +106,7 @@ interface MapProps {
   bounds?: [number, number][] | null;
   startPoint?: [number, number] | null;
   endPoint?: [number, number] | null;
+  reviews?: Review[];
 }
 
 export default function Map({
@@ -103,12 +117,19 @@ export default function Map({
   bounds = null,
   startPoint = null,
   endPoint = null,
+  reviews = [],
 }: MapProps) {
   const defaultCenter: [number, number] = [20.5937, 78.9629];
   const routeColors = ["#4F46E5", "#0D9488", "#E11D48"]; // Indigo, Teal, Rose
 
   const startIcon = createPinIcon("#16a34a", "Start");
   const endIcon = createPinIcon("#dc2626", "End");
+
+  const getReviewIcon = (rating: number) => {
+    if (rating <= 2) return createPinIcon("#ef4444", "!"); // Red
+    if (rating === 3) return createPinIcon("#eab308", "!"); // Yellow
+    return createPinIcon("#10b981", "!"); // Emerald
+  };
 
   return (
     <div className="w-full h-full relative z-0">
@@ -166,6 +187,35 @@ export default function Map({
                 click: () => onRouteSelect && onRouteSelect(index),
               }}
             />
+          );
+        })}
+
+        {/* Review markers */}
+        {reviews.map((review) => {
+          if (!review.coordinates) return null;
+          const [lat, lng] = review.coordinates.split(',').map(Number);
+          if (isNaN(lat) || isNaN(lng)) return null;
+
+          return (
+            <Marker key={review.id} position={[lat, lng]} icon={getReviewIcon(review.rating)}>
+              <Popup>
+                <div className="flex flex-col gap-2 min-w-[200px] font-sans">
+                  {review.image_url && (
+                    <img src={review.image_url} alt="Review" className="w-full h-32 object-cover rounded-lg" />
+                  )}
+                  <h3 className="font-bold text-gray-900 text-lg">{review.title}</h3>
+                  <div className="flex justify-between items-center bg-gray-50 p-1.5 rounded-lg border border-gray-100">
+                    <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">{review.category}</span>
+                    <span className="text-xs font-bold text-gray-700 flex items-center gap-1">
+                      {review.rating}/5 <span className="text-yellow-500 text-sm">★</span>
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600 my-1">{review.description}</p>
+                  <p className="text-xs text-gray-500 font-medium">📍 {review.location}</p>
+                  <p className="text-[10px] text-gray-400 text-right mt-1">{new Date(review.created_at).toLocaleDateString()}</p>
+                </div>
+              </Popup>
+            </Marker>
           );
         })}
 

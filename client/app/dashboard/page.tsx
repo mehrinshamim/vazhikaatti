@@ -4,6 +4,20 @@ import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import type { RouteOption } from "./Map";
 import { supabase } from "../utils/supabase";
+import ReportIssueModal from "./ReportIssueModal";
+
+export type Review = {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string;
+  category: string;
+  rating: number;
+  location: string;
+  coordinates: string | null;
+  image_url: string | null;
+  created_at: string;
+};
 
 const Map = dynamic(() => import("./Map"), {
   ssr: false,
@@ -157,6 +171,27 @@ export default function DashboardPage() {
   const [routes, setRoutes] = useState<RouteOption[]>([]);
   const [selectedRouteIndex, setSelectedRouteIndex] = useState<number | null>(null);
   const [mapBounds, setMapBounds] = useState<[number, number][] | null>(null);
+
+  // Issues / Reviews State
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reviews, setReviews] = useState<Review[]>([]);
+
+  const fetchReviews = async () => {
+    const { data, error } = await supabase
+      .from("review")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (!error && data) {
+      setReviews(data);
+    } else {
+      console.error("Failed to fetch reviews", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchReviews();
+  }, []);
 
   useEffect(() => {
     const checkProfile = async () => {
@@ -525,6 +560,7 @@ export default function DashboardPage() {
           bounds={mapBounds}
           startPoint={startPlace ? [startPlace.lat, startPlace.lon] : null}
           endPoint={destPlace ? [destPlace.lat, destPlace.lon] : null}
+          reviews={reviews}
         />
       </div>
 
@@ -660,6 +696,24 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Floating UI Container for Report Issue */}
+      <div className="absolute top-10 right-10 z-[1000] flex flex-col items-end gap-4">
+        <button
+          onClick={() => setShowReportModal(true)}
+          className="px-6 py-3 bg-emerald-400 hover:bg-emerald-500 text-gray-900 font-bold rounded-2xl shadow-xl shadow-emerald-500/30 transition-all active:scale-95 flex items-center gap-2 border border-emerald-300"
+        >
+          <span className="text-xl">✍️</span>
+          Report Issue
+        </button>
+      </div>
+
+      <ReportIssueModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        userId={userId || ""}
+        onSuccess={fetchReviews}
+      />
 
       {/* Legacy Free-Tracking Floating Button */}
       <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 z-[1000] flex flex-col items-center">
