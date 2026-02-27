@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, Polyline } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -14,10 +14,19 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
+export interface RouteStep {
+  instruction: string;
+  distance: number;
+  duration: number;
+  type: number;
+  way_points: [number, number];
+}
+
 export interface RouteOption {
   geometry: [number, number][]; // Array of [lat, lng]
   distance: number;
   duration: number;
+  steps: RouteStep[];
 }
 
 export type Review = {
@@ -33,22 +42,28 @@ export type Review = {
   created_at: string;
 };
 
-function FlyToLocation({ position }: { position: [number, number] | null }) {
+function FlyToLocation({ position, recenterKey }: { position: [number, number] | null, recenterKey?: number }) {
   const map = useMap();
   const isFirstFly = useRef(true);
+  const prevRecenterKey = useRef(recenterKey);
 
   useEffect(() => {
     if (position) {
       if (isFirstFly.current) {
         map.flyTo(position, 16, { animate: true, duration: 1.5 });
         isFirstFly.current = false;
+      } else if (recenterKey !== prevRecenterKey.current) {
+        // Explicit recenter trigger
+        map.flyTo(position, 16, { animate: true, duration: 1 });
+        prevRecenterKey.current = recenterKey;
       } else {
+        // Normal position update pan
         map.panTo(position, { animate: true });
       }
     } else {
       isFirstFly.current = true;
     }
-  }, [position, map]);
+  }, [position, map, recenterKey]);
   return null;
 }
 
@@ -59,6 +74,17 @@ function FitBounds({ bounds }: { bounds: [number, number][] | null }) {
       map.fitBounds(bounds, { padding: [50, 50], animate: true });
     }
   }, [bounds, map]);
+  return null;
+}
+
+function MapEventsHelper({ onMapClick }: { onMapClick?: (lat: number, lng: number) => void }) {
+  useMapEvents({
+    click(e) {
+      if (onMapClick) {
+        onMapClick(e.latlng.lat, e.latlng.lng);
+      }
+    },
+  });
   return null;
 }
 
@@ -98,6 +124,37 @@ function createPinIcon(color: string, label: string) {
   });
 }
 
+// Animated pulsing user location dot (Google Maps style)
+function createUserLocationIcon() {
+  return L.divIcon({
+    className: "",
+    html: `
+      <style>
+        @keyframes locRipple {
+          0% { transform: scale(1); opacity: 0.6; }
+          100% { transform: scale(3.5); opacity: 0; }
+        }
+      </style>
+      <div style="position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center">
+        <div style="position:absolute;width:22px;height:22px;background:rgba(79,70,229,0.3);border-radius:50%;animation:locRipple 2s ease-out infinite;top:0;left:0"></div>
+        <div style="position:relative;width:15px;height:15px;background:#4F46E5;border-radius:50%;border:3px solid white;box-shadow:0 2px 10px rgba(79,70,229,0.7);z-index:2"></div>
+      </div>
+    `,
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+  });
+}
+
+// Next-turn waypoint indicator
+function createNextTurnIcon() {
+  return L.divIcon({
+    className: "",
+    html: `<div style="width:12px;height:12px;background:#f97316;border-radius:50%;border:2.5px solid white;box-shadow:0 1px 6px rgba(249,115,22,0.6)"></div>`,
+    iconSize: [12, 12],
+    iconAnchor: [6, 6],
+  });
+}
+
 interface MapProps {
   position: [number, number] | null;
   routes?: RouteOption[];
@@ -107,6 +164,10 @@ interface MapProps {
   startPoint?: [number, number] | null;
   endPoint?: [number, number] | null;
   reviews?: Review[];
+  nextTurnPoint?: [number, number] | null;
+  recenterKey?: number;
+  onMapClick?: (lat: number, lng: number) => void;
+  pickedPoint?: [number, number] | null;
 }
 
 export default function Map({
@@ -118,12 +179,19 @@ export default function Map({
   startPoint = null,
   endPoint = null,
   reviews = [],
+  nextTurnPoint = null,
+  recenterKey = 0,
+  onMapClick,
+  pickedPoint = null,
 }: MapProps) {
   const defaultCenter: [number, number] = [10.0159, 76.3419]; // Kochi, Kerala
   const routeColors = ["#4F46E5", "#0D9488", "#E11D48"]; // Indigo, Teal, Rose
 
   const startIcon = createPinIcon("#16a34a", "Start");
   const endIcon = createPinIcon("#dc2626", "End");
+  const pickedIcon = createPinIcon("#8b5cf6", "Picked");
+  const userLocationIcon = createUserLocationIcon();
+  const nextTurnIcon = createNextTurnIcon();
 
   const getReviewIcon = (rating: number) => {
     if (rating <= 2) return createPinIcon("#ef4444", "!"); // Red
@@ -145,11 +213,14 @@ export default function Map({
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
         />
 
-        {/* Live location marker */}
+        {/* Animated user location marker */}
         {position && (
-          <Marker position={position}>
-            <Popup>You are here!</Popup>
-          </Marker>
+          <Marker position={position} icon={userLocationIcon} />
+        )}
+
+        {/* Next turn waypoint indicator */}
+        {nextTurnPoint && (
+          <Marker position={nextTurnPoint} icon={nextTurnIcon} />
         )}
 
         {/* Start pin */}
@@ -220,8 +291,12 @@ export default function Map({
           );
         })}
 
-        <FlyToLocation position={position} />
+        <FlyToLocation position={position} recenterKey={recenterKey} />
         <FitBounds bounds={bounds} />
+        <MapEventsHelper onMapClick={onMapClick} />
+        {pickedPoint && (
+          <Marker position={pickedPoint} icon={pickedIcon} />
+        )}
       </MapContainer>
     </div>
   );

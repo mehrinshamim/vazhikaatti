@@ -1,24 +1,18 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { supabase } from "../utils/supabase";
 
-const LocationPickerMap = dynamic(() => import("./LocationPickerMap"), {
-  ssr: false,
-  loading: () => (
-    <div className="fixed inset-0 z-[4000] flex items-center justify-center bg-white">
-      <svg className="animate-spin h-8 w-8 text-emerald-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-      </svg>
-    </div>
-  ),
-});
+
+
 
 interface ReportIssueModalProps {
   isOpen: boolean;
+  isHidden?: boolean;
   onClose: () => void;
   userId: string;
   onSuccess: () => void;
+  onStartPicker?: () => void;
+  pickedLocation?: { lat: number; lng: number } | null;
 }
 
 const CATEGORIES = [
@@ -31,7 +25,7 @@ const CATEGORIES = [
   'Accident'
 ];
 
-export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }: ReportIssueModalProps) {
+export default function ReportIssueModal({ isOpen, isHidden, onClose, userId, onSuccess, onStartPicker, pickedLocation }: ReportIssueModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState(CATEGORIES[0]);
@@ -46,13 +40,34 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-  const [showMapPicker, setShowMapPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (pickedLocation) {
+      setCoordinates(pickedLocation);
+      // reverse geocode the picked location
+      const reverseGeocode = async () => {
+        try {
+          const res = await fetch(`/api/reverse-geocode?lat=${pickedLocation.lat}&lon=${pickedLocation.lng}`);
+          const data = await res.json();
+          if (data && data.display_name) {
+            setLocationName(data.display_name);
+          } else {
+            setLocationName(`${pickedLocation.lat.toFixed(4)}, ${pickedLocation.lng.toFixed(4)}`);
+          }
+        } catch (e) {
+          console.error("Reverse geocode failed", e);
+          setLocationName(`${pickedLocation.lat.toFixed(4)}, ${pickedLocation.lng.toFixed(4)}`);
+        }
+      };
+      reverseGeocode();
+    }
+  }, [pickedLocation]);
 
   if (!isOpen) return null;
 
@@ -220,7 +235,7 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
       };
 
       const validationResponse = await fetch(
-        "http://localhost:8000/validate",
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/validate`,
         {
           method: "POST",
           headers: {
@@ -241,9 +256,8 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
       // If validation fails → STOP
       if (!validationData.valid) {
         setErrorMsg(
-          `Validation Error: ${
-            validationData.reason ||
-            "Validation failed. Please check your input."
+          `Validation Error: ${validationData.reason ||
+          "Validation failed. Please check your input."
           }`
         );
         setIsSubmitting(false);
@@ -301,7 +315,7 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
   };
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4" style={{ display: isHidden ? "none" : "flex" }}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto font-sans flex flex-col border border-gray-100">
@@ -419,7 +433,7 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
           {/* Pin on Map button */}
           <button
             type="button"
-            onClick={() => setShowMapPicker(true)}
+            onClick={() => onStartPicker && onStartPicker()}
             className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 hover:bg-emerald-50 border-2 border-dashed border-gray-200 hover:border-emerald-300 rounded-xl transition-all group"
           >
             <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-white border border-gray-200 group-hover:border-emerald-200 group-hover:bg-emerald-50 shadow-sm shrink-0 transition-colors">
@@ -527,18 +541,6 @@ export default function ReportIssueModal({ isOpen, onClose, userId, onSuccess }:
           </button>
         </form>
       </div>
-
-      {/* Map location picker overlay */}
-      {showMapPicker && (
-        <LocationPickerMap
-          onConfirm={({ lat, lng, locationName: pickedName }) => {
-            setLocationName(pickedName);
-            setCoordinates({ lat, lng });
-            setShowMapPicker(false);
-          }}
-          onCancel={() => setShowMapPicker(false)}
-        />
-      )}
     </div>
   );
 }

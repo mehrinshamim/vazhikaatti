@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
-import type { RouteOption } from "./Map";
+import Image from "next/image";
+import type { RouteOption, RouteStep } from "./Map";
 import { supabase } from "../utils/supabase";
 import ReportIssueModal from "./ReportIssueModal";
 import PfpCreat from "./pfpcreate";
@@ -30,7 +31,174 @@ const Map = dynamic(() => import("./Map"), {
   ),
 });
 
-// Helper component for Location Autocomplete
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) *
+    Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatDistance(meters: number): string {
+  if (meters < 1000) return `${Math.round(meters)} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
+function formatDuration(seconds: number): string {
+  const mins = Math.round(seconds / 60);
+  if (mins < 60) return `${mins} min`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+// ─── Direction Icon ──────────────────────────────────────────────────────────
+// ORS type: 0=left, 1=right, 2=sharp-left, 3=sharp-right, 4=slight-left,
+//           5=slight-right, 6=straight, 7=roundabout, 8=exit-roundabout,
+//           9=u-turn, 10=destination, 11=depart, 12=keep-left, 13=keep-right
+
+function DirectionIcon({ type }: { type: number }) {
+  const cls = "w-9 h-9 text-white";
+  const sw = { strokeWidth: 2.5, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+
+  if (type === 1 || type === 3 || type === 5 || type === 13) {
+    // Right variants
+    return (
+      <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" {...sw}>
+        <path d="M5 19V8a3 3 0 013-3h8M13 3l3 2-3 2" />
+      </svg>
+    );
+  }
+  if (type === 0 || type === 2 || type === 4 || type === 12) {
+    // Left variants
+    return (
+      <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" {...sw}>
+        <path d="M19 19V8a3 3 0 00-3-3H8M11 3L8 5l3 2" />
+      </svg>
+    );
+  }
+  if (type === 9) {
+    // U-turn
+    return (
+      <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" {...sw}>
+        <path d="M9 3l-3 3 3 3M6 6a6 6 0 016 6v6" />
+      </svg>
+    );
+  }
+  if (type === 7 || type === 8) {
+    // Roundabout
+    return (
+      <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" {...sw}>
+        <circle cx="12" cy="12" r="5" />
+        <path d="M17 12a5 5 0 00-5-5V4M15 4l2 3-3 1" />
+      </svg>
+    );
+  }
+  if (type === 10) {
+    // Destination
+    return (
+      <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" {...sw}>
+        <path d="M12 21C12 21 5 13.5 5 8.5a7 7 0 1114 0C19 13.5 12 21 12 21z" />
+        <circle cx="12" cy="8.5" r="2.5" fill="white" stroke="none" />
+      </svg>
+    );
+  }
+  // Straight / depart / default (6, 11, etc.)
+  return (
+    <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" {...sw}>
+      <path d="M12 19V5M6 11l6-6 6 6" />
+    </svg>
+  );
+}
+
+// ─── Navigation Panel ────────────────────────────────────────────────────────
+
+interface NavPanelProps {
+  step: RouteStep;
+  stepIndex: number;
+  totalSteps: number;
+  distToTurn: number | null;
+  remainingDistance: number;
+  remainingDuration: number;
+  voiceMuted: boolean;
+  onToggleMute: () => void;
+  arrived: boolean;
+}
+
+function NavigationPanel({
+  step,
+  stepIndex,
+  totalSteps,
+  distToTurn,
+  remainingDistance,
+  remainingDuration,
+  voiceMuted,
+  onToggleMute,
+  arrived,
+}: NavPanelProps) {
+  return (
+    <div className="w-full bg-[#1e1b4b] rounded-2xl shadow-2xl overflow-hidden border border-indigo-900/60">
+      {/* Main instruction row */}
+      <div className="flex items-center gap-4 px-5 py-4">
+        <div className="shrink-0 w-14 h-14 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg">
+          <DirectionIcon type={arrived ? 10 : step.type} />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-white font-bold text-base leading-snug truncate">
+            {arrived ? "You have arrived!" : step.instruction}
+          </p>
+          {!arrived && distToTurn !== null && (
+            <p className="text-indigo-300 text-sm font-semibold mt-0.5">
+              In {formatDistance(distToTurn)}
+            </p>
+          )}
+        </div>
+
+        {/* Mute toggle */}
+        <button
+          onClick={onToggleMute}
+          className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+          style={{ background: voiceMuted ? "rgba(99,102,241,0.2)" : "rgba(99,102,241,0.5)" }}
+          title={voiceMuted ? "Unmute voice" : "Mute voice"}
+        >
+          {voiceMuted ? (
+            <svg className="w-5 h-5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+              <path d="M11 5L6 9H2v6h4l5 4V5z" />
+              <line x1="23" y1="9" x2="17" y2="15" />
+              <line x1="17" y1="9" x2="23" y2="15" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5 text-indigo-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" />
+            </svg>
+          )}
+        </button>
+      </div>
+
+      {/* Footer: remaining info + step progress */}
+      <div className="flex items-center justify-between px-5 py-2.5 bg-indigo-950/60 border-t border-indigo-800/40">
+        <div className="flex items-center gap-3 text-xs font-semibold text-indigo-300">
+          <span>{formatDistance(remainingDistance)} remaining</span>
+          <span className="text-indigo-700">•</span>
+          <span>{formatDuration(remainingDuration)}</span>
+        </div>
+        <span className="text-xs text-indigo-500 font-medium">
+          Step {stepIndex + 1} / {totalSteps}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Location Autocomplete ───────────────────────────────────────────────────
+
 interface NominatimPlace {
   place_id: number;
   display_name: string;
@@ -145,6 +313,8 @@ function LocationAutocomplete({
   );
 }
 
+// ─── Dashboard Page ──────────────────────────────────────────────────────────
+
 export default function DashboardPage() {
   const [profileLoading, setProfileLoading] = useState(true);
   const [needsProfile, setNeedsProfile] = useState(false);
@@ -172,9 +342,24 @@ export default function DashboardPage() {
   const [selectedRouteIndex, setSelectedRouteIndex] = useState<number | null>(null);
   const [mapBounds, setMapBounds] = useState<[number, number][] | null>(null);
 
+  // Navigation States
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [voiceMuted, setVoiceMuted] = useState(false);
+  const [distToNextTurn, setDistToNextTurn] = useState<number | null>(null);
+  const [arrived, setArrived] = useState(false);
+  const [recenterKey, setRecenterKey] = useState(0);
+
+  // Refs to avoid stale closures in navigation logic
+  const voiceMutedRef = useRef(false);
+  const currentStepRef = useRef(0);
+  const preAnnouncedRef = useRef(false);
+  const arrivedRef = useRef(false);
+
   // Issues / Reviews State
   const [showReportModal, setShowReportModal] = useState(false);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [isPickingLocation, setIsPickingLocation] = useState(false);
+  const [pickedLocation, setPickedLocation] = useState<{ lat: number, lng: number } | null>(null);
 
   const fetchReviews = async () => {
     const { data, error } = await supabase
@@ -224,14 +409,116 @@ export default function DashboardPage() {
     checkProfile();
   }, []);
 
-
   // Clean up the geolocation watch
   useEffect(() => {
     return () => {
       if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
     };
   }, [watchId]);
 
+  // ─── Voice Synthesis ───────────────────────────────────────────────────────
+  const speak = (text: string) => {
+    if (voiceMutedRef.current) return;
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    utterance.rate = 0.88;
+    utterance.pitch = 1.05;
+    utterance.volume = 1.0;
+    // Prefer a natural-sounding voice if available
+    const voices = window.speechSynthesis.getVoices();
+    const preferred =
+      voices.find((v) => v.lang.startsWith("en") && v.name.toLowerCase().includes("google")) ||
+      voices.find((v) => v.lang.startsWith("en") && !v.localService) ||
+      voices.find((v) => v.lang.startsWith("en")) ||
+      null;
+    if (preferred) utterance.voice = preferred;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // ─── Navigation: step advancement on location change ──────────────────────
+  useEffect(() => {
+    if (!location || selectedRouteIndex === null) return;
+    const route = routes[selectedRouteIndex];
+    if (!route || !route.steps || route.steps.length === 0) return;
+    if (arrivedRef.current) return;
+
+    const steps = route.steps;
+    const stepIdx = currentStepRef.current;
+    const step = steps[stepIdx];
+    if (!step) return;
+
+    const endIdx = step.way_points[1];
+    const endPoint = route.geometry[endIdx];
+    if (!endPoint) return;
+
+    const dist = haversineDistance(location[0], location[1], endPoint[0], endPoint[1]);
+    setDistToNextTurn(Math.round(dist));
+
+    // Pre-announce at 80m before the next turn
+    if (dist < 80 && dist > 25 && !preAnnouncedRef.current) {
+      if (stepIdx < steps.length - 1) {
+        const nextStep = steps[stepIdx + 1];
+        speak(`In ${Math.round(dist)} meters, ${nextStep.instruction}`);
+        preAnnouncedRef.current = true;
+      }
+    }
+
+    // Advance step when within 25m of the turn point
+    if (dist < 25) {
+      if (stepIdx >= steps.length - 1) {
+        // Arrived at destination
+        arrivedRef.current = true;
+        setArrived(true);
+        speak("You have arrived at your destination.");
+      } else {
+        const nextIdx = stepIdx + 1;
+        currentStepRef.current = nextIdx;
+        setCurrentStepIndex(nextIdx);
+        speak(steps[nextIdx].instruction);
+        preAnnouncedRef.current = false;
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location]);
+
+  // ─── Route Data Helpers ────────────────────────────────────────────────────
+  const getActiveRoute = () =>
+    selectedRouteIndex !== null ? routes[selectedRouteIndex] : null;
+
+  const getRemainingDistance = () => {
+    const route = getActiveRoute();
+    if (!route?.steps) return route?.distance ?? 0;
+    let remaining = 0;
+    for (let i = currentStepIndex; i < route.steps.length; i++) {
+      remaining += route.steps[i].distance;
+    }
+    return remaining;
+  };
+
+  const getRemainingDuration = () => {
+    const route = getActiveRoute();
+    if (!route?.steps) return route?.duration ?? 0;
+    let remaining = 0;
+    for (let i = currentStepIndex; i < route.steps.length; i++) {
+      remaining += route.steps[i].duration;
+    }
+    return remaining;
+  };
+
+  const getNextTurnPoint = (): [number, number] | null => {
+    const route = getActiveRoute();
+    if (!route?.steps || arrived) return null;
+    const step = route.steps[currentStepIndex];
+    if (!step) return null;
+    return route.geometry[step.way_points[1]] ?? null;
+  };
+
+  // ─── Route Fetching ────────────────────────────────────────────────────────
   const findRoutes = async () => {
     if (!startPlace || !destPlace) {
       alert("Please select both start and destination locations from the dropdowns.");
@@ -239,13 +526,15 @@ export default function DashboardPage() {
     }
 
     setIsFetchingRoutes(true);
-    // Reset previous selection and tracking if active
     if (isTracking && watchId !== null) stopTracking();
     setRoutes([]);
     setSelectedRouteIndex(null);
     setMapBounds(null);
+    setCurrentStepIndex(0);
+    currentStepRef.current = 0;
+    setArrived(false);
+    arrivedRef.current = false;
 
-    // Call OpenRouteService (GeoJSON format)
     const apiKey = process.env.NEXT_PUBLIC_ORS_API_KEY;
     if (!apiKey) {
       alert("OpenRouteService API Key is missing.");
@@ -254,7 +543,6 @@ export default function DashboardPage() {
     }
 
     try {
-      // ORS API expects Longitude, Latitude arrays
       const body = {
         coordinates: [[startPlace.lon, startPlace.lat], [destPlace.lon, destPlace.lat]],
         alternative_routes: { target_count: 3 }
@@ -280,34 +568,67 @@ export default function DashboardPage() {
 
       if (data.features && data.features.length > 0) {
         const fetchedRoutes: RouteOption[] = data.features.map(
-          (feature: { geometry: { coordinates: [number, number][] }, properties: { summary: { distance: number, duration: number } } }) => ({
-            geometry: feature.geometry.coordinates.map((coord: [number, number]) => [coord[1], coord[0]]), // GeoJSON is [lon,lat], Leaflet needs [lat,lon]
-            distance: feature.properties.summary.distance,
-            duration: feature.properties.summary.duration,
-          }));
+          (feature: {
+            geometry: { coordinates: [number, number][] };
+            properties: {
+              summary: { distance: number; duration: number };
+              segments: { steps: { instruction: string; distance: number; duration: number; type: number; way_points: number[] }[] }[];
+            };
+          }) => {
+            // Convert geometry from [lon,lat] to [lat,lon]
+            const geometry: [number, number][] = feature.geometry.coordinates.map(
+              (coord: [number, number]) => [coord[1], coord[0]]
+            );
+
+            // Flatten all segment steps
+            const steps: RouteStep[] = [];
+            if (feature.properties.segments) {
+              for (const segment of feature.properties.segments) {
+                if (segment.steps) {
+                  for (const s of segment.steps) {
+                    steps.push({
+                      instruction: s.instruction,
+                      distance: s.distance,
+                      duration: s.duration,
+                      type: s.type,
+                      way_points: [s.way_points[0], s.way_points[1]],
+                    });
+                  }
+                }
+              }
+            }
+
+            return {
+              geometry,
+              distance: feature.properties.summary.distance,
+              duration: feature.properties.summary.duration,
+              steps,
+            };
+          }
+        );
 
         setRoutes(fetchedRoutes);
-
-        // Accumulate all bounds to fit map
         const allBounds: [number, number][] = [];
-        fetchedRoutes.forEach(r => allBounds.push(...r.geometry));
+        fetchedRoutes.forEach((r) => allBounds.push(...r.geometry));
         setMapBounds(allBounds);
       } else {
         alert("No routes found between these locations.");
       }
-
     } catch (e) {
       console.error("Routing error", e);
       alert("An error occurred fetching the routes.");
     }
 
     setIsFetchingRoutes(false);
-    setShowJourneyPanel(false); // Close panel gently so they can look at map
+    setShowJourneyPanel(false);
   };
 
   const stopTracking = () => {
     if (watchId !== null) {
       navigator.geolocation.clearWatch(watchId);
+    }
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
     }
     setIsTracking(false);
     setWatchId(null);
@@ -316,9 +637,14 @@ export default function DashboardPage() {
 
   const handleRouteSelect = (index: number) => {
     setSelectedRouteIndex(index);
-    setMapBounds(routes[index].geometry); // Zoom into the selected route
+    setMapBounds(routes[index].geometry);
+    setCurrentStepIndex(0);
+    currentStepRef.current = 0;
+    preAnnouncedRef.current = false;
+    setArrived(false);
+    arrivedRef.current = false;
+    setDistToNextTurn(null);
 
-    // Automatically start live tracking
     if (!navigator.geolocation) {
       alert("Geolocation is not supported by your browser");
       return;
@@ -328,8 +654,8 @@ export default function DashboardPage() {
 
     setLoadingLocation(true);
     const id = navigator.geolocation.watchPosition(
-      (position) => {
-        setLocation([position.coords.latitude, position.coords.longitude]);
+      (pos) => {
+        setLocation([pos.coords.latitude, pos.coords.longitude]);
         setLoadingLocation(false);
         setIsTracking(true);
       },
@@ -342,12 +668,19 @@ export default function DashboardPage() {
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
     );
     setWatchId(id);
+
+    // Announce navigation start after a short delay (let voices load)
+    setTimeout(() => {
+      const steps = routes[index]?.steps;
+      if (steps && steps.length > 0) {
+        speak(`Navigation started. ${steps[0].instruction}`);
+      }
+    }, 600);
   };
 
   const handleFreeTrackingToggle = () => {
     if (isTracking && watchId !== null) {
       stopTracking();
-      // If we stop tracking, also wipe journey states if one is active
       setSelectedRouteIndex(null);
       setRoutes([]);
       return;
@@ -360,8 +693,8 @@ export default function DashboardPage() {
 
     setLoadingLocation(true);
     const id = navigator.geolocation.watchPosition(
-      (position) => {
-        setLocation([position.coords.latitude, position.coords.longitude]);
+      (pos) => {
+        setLocation([pos.coords.latitude, pos.coords.longitude]);
         setLoadingLocation(false);
         setIsTracking(true);
       },
@@ -383,8 +716,36 @@ export default function DashboardPage() {
     setStartPlace(null);
     setDestPlace(null);
     setMapBounds(null);
-    setInputResetKey(k => k + 1); // Remount inputs to reset typed text
+    setCurrentStepIndex(0);
+    currentStepRef.current = 0;
+    setArrived(false);
+    arrivedRef.current = false;
+    setDistToNextTurn(null);
+    setInputResetKey((k) => k + 1);
   };
+
+  const toggleMute = () => {
+    const newMuted = !voiceMuted;
+    setVoiceMuted(newMuted);
+    voiceMutedRef.current = newMuted;
+    if (!newMuted) {
+      // Unmuting: repeat current instruction
+      const route = getActiveRoute();
+      if (route?.steps?.[currentStepIndex]) {
+        speak(route.steps[currentStepIndex].instruction);
+      }
+    } else {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    }
+  };
+
+  // ─── Derived navigation values ─────────────────────────────────────────────
+  const activeRoute = getActiveRoute();
+  const isNavigating = selectedRouteIndex !== null && isTracking && activeRoute?.steps && activeRoute.steps.length > 0;
+  const currentStep = activeRoute?.steps?.[currentStepIndex] ?? null;
+  const nextTurnPoint = getNextTurnPoint();
 
   if (profileLoading) {
     return (
@@ -440,6 +801,18 @@ export default function DashboardPage() {
           startPoint={startPlace ? [startPlace.lat, startPlace.lon] : null}
           endPoint={destPlace ? [destPlace.lat, destPlace.lon] : null}
           reviews={reviews}
+          nextTurnPoint={nextTurnPoint}
+          recenterKey={recenterKey}
+          onMapClick={(lat, lng) => {
+            if (isPickingLocation) {
+              setPickedLocation({ lat, lng });
+              // We don't auto-close the picker mode here in case they want to adjust it,
+              // or they can just click "Done" in the banner. Let's just auto-return to modal:
+              setIsPickingLocation(false);
+              setShowReportModal(true);
+            }
+          }}
+          pickedPoint={pickedLocation ? [pickedLocation.lat, pickedLocation.lng] : null}
         />
       </div>
 
@@ -450,20 +823,73 @@ export default function DashboardPage() {
         onLiveLocationClick={handleFreeTrackingToggle}
       />
 
-      {/* Floating UI Container */}
-      <div className="absolute top-4 right-10 z-[1000] flex flex-col items-end gap-4">
-        {/* Start Journey Trigger */}
-        {!showJourneyPanel && (
+      {/* Picking Location Banner */}
+      {isPickingLocation && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[2000] flex flex-col items-center gap-3 animate-bounce">
+          <div className="bg-white/95 backdrop-blur-md px-6 py-3 rounded-full shadow-2xl border border-emerald-200 flex items-center gap-3">
+            <span className="text-xl">📍</span>
+            <span className="text-emerald-800 font-bold tracking-wide">Tap anywhere on the map</span>
+          </div>
           <button
-            onClick={() => setShowJourneyPanel(true)}
-            className="px-5 py-3 bg-white hover:bg-gray-100 text-gray-900 font-bold rounded-2xl shadow-xl transition-all active:scale-95 flex items-center gap-2 border border-gray-200"
+            onClick={() => {
+              setIsPickingLocation(false);
+              setShowReportModal(true);
+            }}
+            className="px-4 py-2 bg-gray-900 text-white text-xs font-bold rounded-full shadow-lg hover:bg-gray-800 transition-colors"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-600" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-            </svg>
-            Plan Journey
+            Cancel
           </button>
-        )}
+        </div>
+      )}
+
+      {/* Floating Mascot — bottom left, above sidebar button */}
+      <div className="absolute bottom-24 left-4 z-[1000] flex flex-col items-start gap-1 pointer-events-none">
+        {/* Speech bubble */}
+        <div
+          className="px-3 py-1.5 rounded-2xl rounded-bl-none text-sm font-semibold text-indigo-900 shadow-lg"
+          style={{
+            background: "rgba(255,255,255,0.92)",
+            backdropFilter: "blur(8px)",
+            border: "1px solid rgba(99,102,241,0.18)",
+            boxShadow: "0 4px 16px rgba(99,102,241,0.18)",
+            maxWidth: "140px",
+            lineHeight: "1.4",
+          }}
+        >
+          Stay safe out there! 🦉
+        </div>
+        {/* Mascot */}
+        <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-white shadow-xl ml-1">
+          <Image
+            src="/mascot.png"
+            alt="Vazhikaatti Owl Mascot"
+            width={48}
+            height={48}
+            className="object-cover w-full h-full"
+          />
+        </div>
+      </div>
+
+      {/* Floating UI Container */}
+      <div className="absolute top-4 right-10 z-[1000] flex flex-col items-end gap-3">
+        {/* Top controls row: re-center trigger + journey trigger */}
+        <div className="flex items-center gap-2">
+          {/* Re-center Map Button */}
+          <button
+            onClick={() => {
+              if (location) {
+                setRecenterKey(k => k + 1);
+              } else {
+                handleFreeTrackingToggle();
+              }
+            }}
+            title="Re-center map"
+            className="flex items-center justify-center w-12 h-12 bg-white hover:bg-gray-50 text-gray-700 rounded-2xl shadow-xl transition-all active:scale-95 border border-gray-200"
+          >
+            <Image src="/recentre.png" alt="Recenter Map" width={24} height={24} className="opacity-80 object-contain" />
+          </button>
+
+        </div>
 
         {/* Journey Control Panel */}
         {showJourneyPanel && (
@@ -539,7 +965,6 @@ export default function DashboardPage() {
                       <div className="flex justify-between items-center w-full">
                         <span className={`font-bold ${textColorClass}`}>Route {i + 1}</span>
                         <span className={`text-xs font-semibold px-2 py-1 rounded bg-white/60 ${textColorClass} flex items-center gap-1`}>
-                          {/* Walking person SVG */}
                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
                             <path d="M13.5 5.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm-1.45 1.72L9 10.5H6.5a1 1 0 0 0 0 2H9.5l1-2.5L9 13v5a1 1 0 0 0 2 0v-4l2-2v6a1 1 0 0 0 2 0v-7l1.5 2h2a1 1 0 0 0 0-2H17l-2-3.5a2 2 0 0 0-2.95-.28z" />
                           </svg>
@@ -552,6 +977,9 @@ export default function DashboardPage() {
                         </svg>
                         {(route.distance / 1000).toFixed(1)} km walking
                       </div>
+                      {route.steps.length > 0 && (
+                        <p className="text-xs text-gray-500">{route.steps.length} steps</p>
+                      )}
                     </button>
                   );
                 })}
@@ -563,17 +991,17 @@ export default function DashboardPage() {
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
                   </span>
-                  Walking Route Active
+                  {arrived ? "Arrived!" : "Navigating..."}
                 </p>
                 <div className="flex gap-2 text-xs font-medium text-gray-700">
                   <span className="bg-gray-100 px-2 py-1.5 rounded-md border border-gray-200 flex items-center gap-1">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 text-indigo-500">
                       <path d="M13.5 5.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm-1.45 1.72L9 10.5H6.5a1 1 0 0 0 0 2H9.5l1-2.5L9 13v5a1 1 0 0 0 2 0v-4l2-2v6a1 1 0 0 0 2 0v-7l1.5 2h2a1 1 0 0 0 0-2H17l-2-3.5a2 2 0 0 0-2.95-.28z" />
                     </svg>
-                    {Math.round(routes[selectedRouteIndex].duration / 60)} mins
+                    {formatDuration(getRemainingDuration())}
                   </span>
                   <span className="bg-gray-100 px-2 py-1.5 rounded-md border border-gray-200">
-                    {(routes[selectedRouteIndex].distance / 1000).toFixed(1)} km
+                    {formatDistance(getRemainingDistance())}
                   </span>
                 </div>
                 <button onClick={clearJourney} className="mt-2 text-xs font-bold text-red-500 hover:text-red-700 text-left w-fit transition-colors">Cancel Journey</button>
@@ -583,59 +1011,61 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Floating UI Container for Report Issue */}
-      <div className="absolute top-20 right-10 z-[1000] flex flex-col items-end gap-4 mt-2">
-        <button
-          onClick={() => setShowReportModal(true)}
-          className="px-5 py-3 bg-emerald-400 hover:bg-emerald-500 text-gray-900 font-bold rounded-2xl shadow-xl shadow-emerald-500/30 transition-all active:scale-95 flex items-center gap-2 border border-emerald-300"
-        >
-          <span className="text-xl">✍️</span>
-          Report Issue
-        </button>
-      </div>
 
-      {/* Free Tracking Toggle (Bottom Center) */}
-      <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-[1000]">
+
+      {/* ─── Navigation Panel (Google Maps style) ─────────────────────────── */}
+      {isNavigating && currentStep && (
+        <div className="absolute bottom-24 left-4 right-4 z-[1000] flex justify-center pointer-events-none">
+          <div className="w-full max-w-lg pointer-events-auto">
+            <NavigationPanel
+              step={currentStep}
+              stepIndex={currentStepIndex}
+              totalSteps={activeRoute!.steps.length}
+              distToTurn={distToNextTurn}
+              remainingDistance={getRemainingDistance()}
+              remainingDuration={getRemainingDuration()}
+              voiceMuted={voiceMuted}
+              onToggleMute={toggleMute}
+              arrived={arrived}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Bottom Action Bar */}
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000] w-[95%] max-w-[400px] flex justify-center gap-2.5">
+        {/* Flag a Hazard button */}
         <button
-          onClick={handleFreeTrackingToggle}
-          disabled={loadingLocation}
-          className={`px-8 py-4 rounded-3xl font-bold font-sans tracking-wide shadow-xl flex items-center gap-3 transition-all ${loadingLocation
-              ? "bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200"
-              : isTracking
-                ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 active:scale-95 shadow-red-500/20"
-                : "bg-emerald-600 text-white border border-emerald-500 hover:bg-emerald-700 active:scale-95 shadow-emerald-600/30"
-            }`}
+          onClick={() => {
+            setPickedLocation(null);
+            setShowReportModal(true);
+          }}
+          className="flex-1 text-emerald-700 font-bold bg-white border border-emerald-200 shadow-xl rounded-full py-3.5 hover:bg-emerald-50 active:scale-95 transition-all text-sm tracking-wide"
         >
-          {loadingLocation ? (
-            <>
-              <svg className="animate-spin h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Locating...
-            </>
-          ) : isTracking ? (
-            <>
-              <span className="text-xl">🛑</span>
-              Stop Tracking
-            </>
-          ) : (
-            <>
-              <span className="text-xl drop-shadow-md">📍</span>
-              Start Live Tracking
-            </>
-          )}
+          Report an Issue
+        </button>
+
+        {/* Chart My Path button */}
+        <button
+          onClick={() => setShowJourneyPanel(true)}
+          className="flex-1 text-emerald-700 font-bold bg-white border border-emerald-200 shadow-xl rounded-full py-3.5 hover:bg-emerald-50 active:scale-95 transition-all text-sm tracking-wide"
+        >
+          Where are you going?
         </button>
       </div>
 
       <ReportIssueModal
-        isOpen={showReportModal}
+        isOpen={showReportModal || isPickingLocation}
+        isHidden={isPickingLocation}
         onClose={() => setShowReportModal(false)}
         userId={userId || ""}
         onSuccess={fetchReviews}
+        onStartPicker={() => {
+          setShowReportModal(false);
+          setIsPickingLocation(true);
+        }}
+        pickedLocation={pickedLocation}
       />
-
-
     </main>
   );
 }
