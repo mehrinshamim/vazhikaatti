@@ -9,7 +9,7 @@ const josefinSans = Josefin_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Vazhikaatti 🌿",
+  title: "Vazhikaatti",
   description:
     "Your safety guide",
 };

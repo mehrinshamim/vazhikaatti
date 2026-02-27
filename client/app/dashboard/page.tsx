@@ -459,7 +459,13 @@ export default function DashboardPage() {
           }}
         >
           <div className="flex flex-col items-center gap-1 text-center">
-            <span className="text-4xl text-emerald-400">🌿</span>
+            <div className="relative w-24 h-24 mb-1 hover:scale-105 transition-transform duration-300">
+              <img
+                src="/mascot.png"
+                alt="Vazhikaatti Mascot"
+                className="w-full h-full object-contain drop-shadow-2xl"
+              />
+            </div>
             <h1 className="text-3xl font-bold text-white tracking-wide">Complete Profile</h1>
             <p className="text-sm text-white/70 mt-1 font-medium">
               Tell us a bit about yourself to get started

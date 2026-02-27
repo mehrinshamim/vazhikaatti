@@ -20,7 +20,7 @@ export default function Home() {
       {/* Hero Content */}
       <div
         className="relative z-10 flex flex-col items-center justify-between text-center px-6 max-w-3xl mx-auto w-full"
-        style={{ minHeight: "70vh", paddingTop: "10vh", paddingBottom: "10vh" }}
+        style={{ minHeight: "70vh", paddingTop: "15vh", paddingBottom: "10vh" }}
       >
         {/* Top block — brand name + heading + subheading grouped tightly */}
         <div className="flex flex-col items-center gap-5">
