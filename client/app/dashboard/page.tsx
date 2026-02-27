@@ -594,6 +594,40 @@ export default function DashboardPage() {
         </button>
       </div>
 
+      {/* Free Tracking Toggle (Bottom Center) */}
+      <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-[1000]">
+        <button
+          onClick={handleFreeTrackingToggle}
+          disabled={loadingLocation}
+          className={`px-8 py-4 rounded-3xl font-bold font-sans tracking-wide shadow-xl flex items-center gap-3 transition-all ${loadingLocation
+              ? "bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200"
+              : isTracking
+                ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 active:scale-95 shadow-red-500/20"
+                : "bg-emerald-600 text-white border border-emerald-500 hover:bg-emerald-700 active:scale-95 shadow-emerald-600/30"
+            }`}
+        >
+          {loadingLocation ? (
+            <>
+              <svg className="animate-spin h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Locating...
+            </>
+          ) : isTracking ? (
+            <>
+              <span className="text-xl">🛑</span>
+              Stop Tracking
+            </>
+          ) : (
+            <>
+              <span className="text-xl drop-shadow-md">📍</span>
+              Start Live Tracking
+            </>
+          )}
+        </button>
+      </div>
+
       <ReportIssueModal
         isOpen={showReportModal}
         onClose={() => setShowReportModal(false)}
