@@ -22,6 +22,7 @@ export default function Sidebar({ onLiveLocationClick, userProfile, currentLocat
   const [isHelplineOpen, setIsHelplineOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [showMyReviews, setShowMyReviews] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
 
   // Share location modal state
   const [showShareModal, setShowShareModal] = useState(false);
@@ -87,7 +88,7 @@ export default function Sidebar({ onLiveLocationClick, userProfile, currentLocat
         {/* Header with mascot */}
         <div className="flex justify-between items-center mb-6 px-2">
           <div className="flex items-center gap-2.5">
-      
+
             <h2 className="text-xl font-bold text-gray-800 tracking-wide">Vazhikaatti</h2>
           </div>
           <button
@@ -250,7 +251,18 @@ export default function Sidebar({ onLiveLocationClick, userProfile, currentLocat
         </div>
 
         {/* Footer */}
-        <div className="mt-auto pt-4 pb-10 border-t border-gray-200">
+        <div className="mt-auto pt-4 pb-10 border-t border-gray-200 flex flex-col gap-2">
+          {/* About button */}
+          <button
+            onClick={() => setShowAbout(true)}
+            className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl transition-all font-bold group"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            About Vazhikaatti
+          </button>
+
           <button
             onClick={async () => {
               const { supabase } = await import("../utils/supabase");
@@ -274,7 +286,7 @@ export default function Sidebar({ onLiveLocationClick, userProfile, currentLocat
           style={{ fontFamily: "var(--font-josefin-sans), 'Josefin Sans', sans-serif" }}
         >
           {/* Backdrop */}
-          
+
 
           {/* Modal Card */}
           <div
@@ -287,9 +299,9 @@ export default function Sidebar({ onLiveLocationClick, userProfile, currentLocat
               boxShadow: "0 8px 32px rgba(0,0,0,0.15), 0 0 20px rgba(16,185,129,0.08) inset",
             }}
           >
-         
 
-            
+
+
 
             <div className="relative z-10 flex flex-col items-center px-6 pt-8 pb-7 gap-5">
               {/* Mascot */}
@@ -413,6 +425,99 @@ export default function Sidebar({ onLiveLocationClick, userProfile, currentLocat
           onClose={() => setShowMyReviews(false)}
           onReviewsChanged={() => { onReviewsChanged?.(); }}
         />
+      )}
+
+      {/* ─── About Modal ─────────────────────────────────────────────────────── */}
+      {showAbout && (
+        <div
+          className="fixed inset-0 z-[3000] flex flex-col"
+          style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowAbout(false); }}
+        >
+          {/* Bottom sheet */}
+          <div
+            className="mt-auto w-full max-w-lg mx-auto bg-white rounded-t-3xl flex flex-col overflow-hidden"
+            style={{ maxHeight: "92dvh", fontFamily: "var(--font-josefin-sans),'Josefin Sans',sans-serif" }}
+          >
+            {/* Handle */}
+            <div className="flex justify-center pt-3 pb-1 shrink-0">
+              <div className="w-10 h-1 bg-gray-300 rounded-full" />
+            </div>
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 pt-2 pb-4 border-b border-gray-100 shrink-0">
+              <h2 className="text-lg font-extrabold text-gray-800">🛡️ About Vazhikaatti</h2>
+              <button
+                onClick={() => setShowAbout(false)}
+                className="w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+              >
+                <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Scrollable content */}
+            <div className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-6">
+
+              {/* Hero tagline */}
+              <div className="text-center">
+                <p className="text-emerald-600 font-bold text-base">Your City. Your Safety. Your Community.</p>
+                <p className="text-gray-500 text-sm leading-relaxed mt-2">
+                  A community-powered safety platform that adds a live hazard layer to your city map — turning neighbour reports into real-time travel intelligence.
+                </p>
+              </div>
+
+              {/* ── Mascot origin story ── */}
+              <div className="bg-amber-50 rounded-2xl p-4 flex gap-4 items-start border border-amber-100">
+                <div className="shrink-0 w-16 h-16 rounded-full overflow-hidden ring-2 ring-amber-200 shadow-md">
+                  <Image src="/mascot.png" alt="Koothu the Owl" width={64} height={64} className="object-cover w-full h-full" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-extrabold text-amber-800 text-sm"> Meet Vazhikaatti</p>
+                  <p className="text-amber-700 text-xs leading-relaxed mt-1">
+                    In Kerala folklore, owls (<em>koothu</em>) have been symbols of silent watchfulness for centuries — perched high, seeing everything in the dark. Vazhikaatti adopted the owl as its guardian: always alert, never alarming, guiding travellers safely home.
+                  </p>
+                </div>
+              </div>
+
+              {/* Mission */}
+              <div>
+                <p className="font-extrabold text-gray-800 text-sm mb-1">🌍 Our Mission</p>
+                <p className="text-gray-600 text-sm leading-relaxed">
+                  To make cities safer through collective awareness. Safety becomes stronger when communities share timely, reliable information — and we give them the tools to do it.
+                </p>
+              </div>
+
+              {/* How it works */}
+              <div>
+                <p className="font-extrabold text-gray-800 text-sm mb-2">🧠 How It Works</p>
+                <div className="flex flex-col gap-2">
+                  {[
+                    ["🗺️", "View nearby hazard reports on a live map"],
+                    ["📸", "Submit reports with photos & descriptions"],
+                    ["📊", "Safety ratings based on severity & recency"],
+                    ["🚨", "Instant access to emergency helplines"],
+                    ["🛰️", "Live location sharing for personal safety"],
+                  ].map(([icon, text]) => (
+                    <div key={text} className="flex items-start gap-2.5">
+                      <span className="text-base mt-0.5">{icon}</span>
+                      <p className="text-gray-600 text-sm leading-snug">{text}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Footer note */}
+              <div className="bg-emerald-50 rounded-xl px-4 py-3 border border-emerald-100 text-center">
+                <p className="text-emerald-700 text-xs font-semibold leading-relaxed">
+                  Built with ❤️ for safer streets · Reports are validated to keep information credible
+                </p>
+              </div>
+
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
