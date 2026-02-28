@@ -862,7 +862,7 @@ export default function DashboardPage() {
   return (
     <main className="relative w-full h-[100dvh] overflow-hidden font-sans">
       {/* Map filling the entire screen */}
-      <div className="absolute inset-0 z-0 bg-gray-900">
+      <div className="absolute inset-0 z-0 bg-white">
         <Map
           position={location}
           routes={routes}
