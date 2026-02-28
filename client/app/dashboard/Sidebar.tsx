@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import MyReviewsModal from "./MyReviewsModal";
 
 interface SidebarProps {
   onLiveLocationClick: () => void;
@@ -12,12 +13,15 @@ interface SidebarProps {
     about_me?: string;
   } | null;
   currentLocation?: [number, number] | null;
+  userId?: string;
+  onReviewsChanged?: () => void;
 }
 
-export default function Sidebar({ onLiveLocationClick, userProfile, currentLocation }: SidebarProps) {
+export default function Sidebar({ onLiveLocationClick, userProfile, currentLocation, userId, onReviewsChanged }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isHelplineOpen, setIsHelplineOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [showMyReviews, setShowMyReviews] = useState(false);
 
   // Share location modal state
   const [showShareModal, setShowShareModal] = useState(false);
@@ -156,6 +160,19 @@ export default function Sidebar({ onLiveLocationClick, userProfile, currentLocat
                 </div>
               </div>
 
+              {/* My Reports button */}
+              {userId && (
+                <button
+                  onClick={() => { setShowMyReviews(true); setIsOpen(false); }}
+                  className="flex items-center gap-4 w-full px-4 py-3.5 hover:bg-emerald-100/80 text-emerald-900 transition-all font-semibold rounded-xl mt-1.5"
+                >
+                  <div className="w-8 flex justify-center text-xl">📋</div>
+                  <span>My Reports</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-auto text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
 
@@ -388,6 +405,15 @@ export default function Sidebar({ onLiveLocationClick, userProfile, currentLocat
           scrollbar-width: none;
         }
       `}</style>
+
+      {/* My Reports Modal */}
+      {showMyReviews && userId && (
+        <MyReviewsModal
+          userId={userId}
+          onClose={() => setShowMyReviews(false)}
+          onReviewsChanged={() => { onReviewsChanged?.(); }}
+        />
+      )}
     </>
   );
 }

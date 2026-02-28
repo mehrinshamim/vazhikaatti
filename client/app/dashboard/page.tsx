@@ -892,6 +892,8 @@ export default function DashboardPage() {
         userProfile={profileForm}
         currentLocation={location}
         onLiveLocationClick={handleFreeTrackingToggle}
+        userId={userId || undefined}
+        onReviewsChanged={fetchReviews}
       />
 
       {/* Picking Location Banner */}
